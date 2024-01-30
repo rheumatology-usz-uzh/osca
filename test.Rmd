@@ -1,6 +1,7 @@
 ---
 title: "Test"
 author: "Christof Seiler"
+output: html_document
 date: "2024-01-30"
 ---
 
