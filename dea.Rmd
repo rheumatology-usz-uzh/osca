@@ -9,7 +9,7 @@ date: "2024-01-30"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-We are going to follow chapter 4 from [here](https://bioconductor.org/books/3.18/OSCA.multisample/multi-sample-comparisons.html).
+We will follow chapter 4 from [here](https://bioconductor.org/books/3.18/OSCA.multisample/multi-sample-comparisons.html).
 
 ## Packages
 
@@ -19,10 +19,12 @@ Install the necessary R package from Bioconductor.
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install(c("MouseGastrulationData", "scater"))
+BiocManager::install(c("MouseGastrulationData", "scater", "scran", "batchelor"))
 ```
 
 ## Data
+
+Load data going through the usual preprocessing steps from chapter 10.
 
 ```{r}
 #--- loading ---#
@@ -35,9 +37,154 @@ sce.chimera
 library(scater)
 rownames(sce.chimera) <- uniquifyFeatureNames(
     rowData(sce.chimera)$ENSEMBL, rowData(sce.chimera)$SYMBOL)
+
+#--- quality-control ---#
+drop <- sce.chimera$celltype.mapped %in% c("stripped", "Doublet")
+sce.chimera <- sce.chimera[,!drop]
+
+#--- normalization ---#
+sce.chimera <- logNormCounts(sce.chimera)
+
+#--- variance-modelling ---#
+library(scran)
+dec.chimera <- modelGeneVar(sce.chimera, block=sce.chimera$sample)
+chosen.hvgs <- dec.chimera$bio > 0
+
+#--- merging ---#
+library(batchelor)
+set.seed(01001001)
+merged <- correctExperiments(sce.chimera, 
+    batch=sce.chimera$sample, 
+    subset.row=chosen.hvgs,
+    PARAM=FastMnnParam(
+        merge.order=list(
+            list(1,3,5), # WT (3 replicates)
+            list(2,4,6)  # td-Tomato (3 replicates)
+        )
+    )
+)
+
+#--- clustering ---#
+g <- buildSNNGraph(merged, use.dimred="corrected")
+clusters <- igraph::cluster_louvain(g)
+colLabels(merged) <- factor(clusters$membership)
+
+#--- dimensionality-reduction ---#
+merged <- runTSNE(merged, dimred="corrected", external_neighbors=TRUE)
+merged <- runUMAP(merged, dimred="corrected", external_neighbors=TRUE)
 ```
 
+The t-SNE plot show the condition (tomato vs control) and the batch (pool 3, 4, and 5). The number of the left are the median center of each cell cluster.
 
+```{r}
+gridExtra::grid.arrange(
+    plotTSNE(merged, colour_by="tomato", text_by="label"),
+    plotTSNE(merged, colour_by=data.frame(pool=factor(merged$pool))),
+    ncol=2
+)
+```
+
+Compare the clusters with an larger cell atlas. Many clusters map to many cell types and the other way around. The color scale represents the log2-count for each combination.
+
+```{r}
+by.label <- table(colLabels(merged), merged$celltype.mapped)
+pheatmap::pheatmap(log2(by.label+1), color=viridis::viridis(101))
+```
+
+## Pseudo-Bulk Analysis
+
+Sum of cells per sample and cell type.
+
+```{r}
+# Using 'label' and 'sample' as our two factors; each column of the output
+# corresponds to one unique combination of these two factors.
+summed <- aggregateAcrossCells(merged, 
+    id=colData(merged)[,c("celltype.mapped", "sample")])
+summed
+```
+
+Differential analysis using `edgeR` for cell type Mesenchyme.
+
+```{r}
+label <- "Mesenchyme"
+current <- summed[,label==summed$celltype.mapped]
+
+# Creating up a DGEList object for use in edgeR:
+library(edgeR)
+y <- DGEList(counts(current), samples=colData(current))
+y
+```
+
+Remove samples with very low library sizes.
+
+```{r}
+discarded <- current$ncells < 10
+y <- y[,!discarded]
+summary(discarded)
+```
+
+Remove low expressed genes.
+
+```{r}
+keep <- filterByExpr(y, group=current$tomato)
+y <- y[keep,]
+summary(keep)
+```
+
+Correct for composition biases.
+
+```{r}
+y <- calcNormFactors(y)
+y$samples
+```
+
+Standard RNA-seq DE diagnostic plots.
+
+```{r}
+for (i in seq_len(ncol(y))) {
+    plotMD(y, column=i)
+}
+```
+
+MDS plot colored by condition.
+
+```{r}
+plotMDS(cpm(y, log=TRUE), 
+    col=ifelse(y$samples$tomato, "red", "blue"))
+```
+
+Design matrix.
+
+```{r}
+design <- model.matrix(~factor(pool) + factor(tomato), y$samples)
+design
+```
+
+Estimate dispersions.
+
+```{r}
+y <- estimateDisp(y, design)
+summary(y$trended.dispersion)
+plotBCV(y)
+```
+
+Estimate the quasi-likelihood dispersions.
+
+```{r}
+fit <- glmQLFit(y, design, robust=TRUE)
+summary(fit$var.prior)
+plotQLDisp(fit)
+```
+
+Differential tests.
+
+```{r}
+res <- glmQLFTest(fit, coef=ncol(design))
+summary(decideTests(res))
+topTags(res)
+```
+
+Very few genes are significant in this case.
 
 ## Reproducibility
 
