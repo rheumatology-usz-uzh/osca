@@ -1,0 +1,46 @@
+---
+title: "DE Analysis"
+author: "Christof Seiler"
+output: html_document
+date: "2024-01-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+We are going to follow chapter 4 from [here](https://bioconductor.org/books/3.18/OSCA.multisample/multi-sample-comparisons.html).
+
+## Packages
+
+Install the necessary R package from Bioconductor.
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install(c("MouseGastrulationData", "scater"))
+```
+
+## Data
+
+```{r}
+#--- loading ---#
+library(MouseGastrulationData)
+sce.chimera <- WTChimeraData(samples=5:10)
+counts(sce.chimera) <- as(counts(sce.chimera), "CsparseMatrix")
+sce.chimera
+
+#--- feature-annotation ---#
+library(scater)
+rownames(sce.chimera) <- uniquifyFeatureNames(
+    rowData(sce.chimera)$ENSEMBL, rowData(sce.chimera)$SYMBOL)
+```
+
+
+
+## Reproducibility
+
+```{r}
+sessionInfo()
+```
