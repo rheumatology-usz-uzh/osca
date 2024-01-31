@@ -19,7 +19,7 @@ Install the necessary R package from Bioconductor.
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install(c("muscat"))
+BiocManager::install(c("muscat", "scater", "UpSetR"))
 ```
 
 ## Data
@@ -61,6 +61,7 @@ sce <- logNormCounts(sce)
 Data preparation.
 
 ```{r}
+library(muscat)
 sce$id <- paste0(sce$stim, sce$ind)
 (sce <- prepSCE(sce, 
     kid = "cell", # subpopulation assignments
@@ -79,14 +80,20 @@ t(table(sce$cluster_id, sce$sample_id))
 Dimension reduction.
 
 ```{r}
+# wrapper to prettify reduced dimension plots
+.plot_dr <- function(sce, dr, col)
+  plotReducedDim(sce, dimred = dr, colour_by = col) +
+    guides(fill = guide_legend(override.aes = list(alpha = 1, size = 3))) +
+    theme_minimal() + theme(aspect.ratio = 1)
+
 # downsample to max. 100 cells per cluster
 cs_by_k <- split(colnames(sce), sce$cluster_id)
 cs100 <- unlist(sapply(cs_by_k, function(u) 
   sample(u, min(length(u), 100))))
 
-plotReducedDim(sce, dimred = "TSNE", colour_by = col) +
-    guides(fill = guide_legend(override.aes = list(alpha = 1, size = 3))) +
-    theme_minimal() + theme(aspect.ratio = 1)
+# plot t-SNE & UMAP colored by cluster & group ID
+.plot_dr(sce[, cs100], "TSNE", "cluster_id")
+.plot_dr(sce[, cs100], "TSNE", "group_id")
 ```
 
 ## Mixed Effect Analysis
@@ -105,7 +112,7 @@ t(head(assay(pb)))
 MDS plot.
 
 ```{r}
-(pb_mds <- pbMDS(pb))
+pb_mds <- pbMDS(pb)
 ```
 
 Pseudobulk.
@@ -125,10 +132,11 @@ head(format(k1[, -ncol(k1)], digits = 2))
 Mixed models.
 
 ```{r}
+#BPPARAM = MulticoreParam(workers = 8, progressbar = FALSE)
 # 1st approach
 mm <- mmDS(sce, method = "dream",
   n_cells = 10, n_samples = 2,
-  min_counts = 1, min_cells = 20)
+  min_count = 1, min_cells = 20)
 
 # 2nd & 3rd approach
 mm <- mmDS(sce, method = "vst", vst = "sctransform")
