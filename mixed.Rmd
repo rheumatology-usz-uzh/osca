@@ -24,11 +24,116 @@ BiocManager::install(c("muscat"))
 
 ## Data
 
-TODO
+Kang 2018 from the vignette.
+
+```{r}
+library(ExperimentHub)
+eh <- ExperimentHub()
+query(eh, "Kang")
+(sce <- eh[["EH2259"]])
+```
+
+Preprocesssing.
+
+```{r}
+# remove undetected genes
+sce <- sce[rowSums(counts(sce) > 0) > 0, ]
+dim(sce)
+
+# calculate per-cell quality control (QC) metrics
+library(scater)
+qc <- perCellQCMetrics(sce)
+
+# remove cells with few or many detected genes
+ol <- isOutlier(metric = qc$detected, nmads = 2, log = TRUE)
+sce <- sce[, !ol]
+dim(sce)
+
+# remove lowly expressed genes
+sce <- sce[rowSums(counts(sce) > 1) >= 10, ]
+dim(sce)
+
+# compute sum-factors & normalize
+sce <- computeLibraryFactors(sce)
+sce <- logNormCounts(sce)
+```
+
+Data preparation.
+
+```{r}
+sce$id <- paste0(sce$stim, sce$ind)
+(sce <- prepSCE(sce, 
+    kid = "cell", # subpopulation assignments
+    gid = "stim",  # group IDs (ctrl/stim)
+    sid = "id",   # sample IDs (ctrl/stim.1234)
+    drop = TRUE))  # drop all other colData columns
+```
+
+Cluster-sample sizes.
+
+```{r}
+# nb. of cells per cluster-sample
+t(table(sce$cluster_id, sce$sample_id))
+```
+
+Dimension reduction.
+
+```{r}
+# downsample to max. 100 cells per cluster
+cs_by_k <- split(colnames(sce), sce$cluster_id)
+cs100 <- unlist(sapply(cs_by_k, function(u) 
+  sample(u, min(length(u), 100))))
+
+plotReducedDim(sce, dimred = "TSNE", colour_by = col) +
+    guides(fill = guide_legend(override.aes = list(alpha = 1, size = 3))) +
+    theme_minimal() + theme(aspect.ratio = 1)
+```
 
 ## Mixed Effect Analysis
 
-TODO
+Aggregate data.
+
+```{r}
+pb <- aggregateData(sce,
+    assay = "counts", fun = "sum",
+    by = c("cluster_id", "sample_id"))
+# one sheet per subpopulation
+assayNames(pb)
+t(head(assay(pb)))
+```
+
+MDS plot.
+
+```{r}
+(pb_mds <- pbMDS(pb))
+```
+
+Pseudobulk.
+
+```{r}
+# run DS analysis
+res <- pbDS(pb, verbose = FALSE)
+# access results table for 1st comparison
+tbl <- res$table[[1]]
+# one data.frame per cluster
+names(tbl)
+# view results for 1st cluster
+k1 <- tbl[[1]]
+head(format(k1[, -ncol(k1)], digits = 2))
+```
+
+Mixed models.
+
+```{r}
+# 1st approach
+mm <- mmDS(sce, method = "dream",
+  n_cells = 10, n_samples = 2,
+  min_counts = 1, min_cells = 20)
+
+# 2nd & 3rd approach
+mm <- mmDS(sce, method = "vst", vst = "sctransform")
+mm <- mmDS(sce, method = "nbinom")
+```
 
 ## Reproducibility
 

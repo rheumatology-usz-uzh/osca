@@ -19,16 +19,98 @@ Install the necessary R package from Bioconductor.
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install(c("muscat"))
+BiocManager::install("distinct")
 ```
 
 ## Data
 
-TODO
+Load the Kang 18 dataset from their vignette.
+
+```{r}
+library(SingleCellExperiment)
+data("Kang_subset", package = "distinct")
+Kang_subset
+colData(Kang_subset)
+Kang_subset@metadata$experiment_info
+```
 
 ## Nonparametric Analysis
 
-TODO
+Create design matrix.
+
+```{r}
+library(distinct)
+
+samples = Kang_subset@metadata$experiment_info$sample_id
+group = Kang_subset@metadata$experiment_info$stim
+design = model.matrix(~group)
+# rownames of the design must indicate sample ids:
+rownames(design) = samples
+design
+```
+
+Permutation test.
+
+```{r}
+set.seed(61217)
+res = distinct_test(x = Kang_subset, 
+                    name_assays_expression = "logcounts",
+                    name_cluster = "cell",
+                    name_sample = "sample_id",
+                    design = design,
+                    column_to_test = 2,
+                    min_non_zero_cells = 20,
+                    n_cores = 2)
+head(res)
+```
+
+Compute log2-fold changes.
+
+```{r}
+res = log2_FC(res = res,
+              x = Kang_subset, 
+              name_assays_expression = "cpm",
+              name_group = "stim",
+              name_cluster = "cell")
+head(res)
+```
+
+Print top overall hits.
+
+```{r}
+head(top_results(res))
+```
+
+Print cluster specific hits.
+
+```{r}
+top_results(res, cluster = "Dendritic cells")
+```
+
+Plot densities.
+
+```{r}
+plot_densities(x = Kang_subset,
+               gene = "ISG15",
+               cluster = "Dendritic cells",
+               name_assays_expression = "logcounts",
+               name_cluster = "cell",
+               name_sample = "sample_id",
+               name_group = "stim")
+```
+
+Plot average densities.
+
+```{r}
+plot_densities(x = Kang_subset,
+               gene = "ISG15",
+               cluster = "Dendritic cells",
+               name_assays_expression = "logcounts",
+               name_cluster = "cell",
+               name_sample = "sample_id",
+               name_group = "stim",
+               group_level = TRUE)
+```
 
 ## Reproducibility
 
