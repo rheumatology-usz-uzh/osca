@@ -19,7 +19,14 @@ Install the necessary R package from Bioconductor.
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
-BiocManager::install("distinct")
+# distinct fails to install with R 4.3.1 throwing error
+# RcppParallel.h: No such file or directory
+# it works with R 4.4.0
+
+# BiocManager::install("distinct")
+
+# use the GitHub version until ScienceApps update to R 4.4.*
+devtools::install_github("https://github.com/SimoneTiberi/distinct")
 ```
 
 ## Data
