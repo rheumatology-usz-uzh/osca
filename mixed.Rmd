@@ -1,0 +1,37 @@
+---
+title: "Mixed Effect DE Analysis"
+author: "Christof Seiler"
+output: html_document
+date: "`r gsub(' 0', ' ', format(Sys.time(), '%B %d, %Y'))`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+We will follow the `muscat` vignette on Bioconductor [here](https://bioconductor.org/packages/release/bioc/vignettes/muscat/inst/doc/analysis.html#differential-state-ds-analysis).
+
+## Packages
+
+Install the necessary R package from Bioconductor.
+
+```{r}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install(c("muscat"))
+```
+
+## Data
+
+TODO
+
+## Mixed Effect Analysis
+
+TODO
+
+## Reproducibility
+
+```{r}
+sessionInfo()
+```
