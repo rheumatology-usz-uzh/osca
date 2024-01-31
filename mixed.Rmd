@@ -132,11 +132,13 @@ head(format(k1[, -ncol(k1)], digits = 2))
 Mixed models.
 
 ```{r}
-#BPPARAM = MulticoreParam(workers = 8, progressbar = FALSE)
+library(BiocParallel)
 # 1st approach
 mm <- mmDS(sce, method = "dream",
   n_cells = 10, n_samples = 2,
-  min_count = 1, min_cells = 20)
+  min_count = 1, min_cells = 20,
+  BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE)
+  )
 
 # 2nd & 3rd approach
 mm <- mmDS(sce, method = "vst", vst = "sctransform")
@@ -146,6 +148,7 @@ mm <- mmDS(sce, method = "nbinom")
 Print results.
 
 ```{r}
+library(dplyr)
 # filter FDR < 5%, abs(logFC) > 1 & sort by adj. p-value
 tbl_fil <- lapply(tbl, function(u) {
   u <- dplyr::filter(u, p_adj.loc < 0.05, abs(logFC) > 1)
@@ -171,12 +174,12 @@ assayNames(frq)
 # expression frequencies in each
 # sample & group; 1st cluster
 t(head(assay(frq), 5))
-
 ```
 
 Visualizing between-cluster concordance.
 
 ```{r}
+library(purrr)
 library(UpSetR)
 de_gs_by_k <- map(tbl_fil, "gene")
 upset(fromList(de_gs_by_k))
