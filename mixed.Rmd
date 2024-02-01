@@ -96,7 +96,7 @@ cs100 <- unlist(sapply(cs_by_k, function(u)
 .plot_dr(sce[, cs100], "TSNE", "group_id")
 ```
 
-## Mixed Effect Analysis
+## Pseudobulk Analysis
 
 Aggregate data.
 
@@ -127,22 +127,6 @@ names(tbl)
 # view results for 1st cluster
 k1 <- tbl[[1]]
 head(format(k1[, -ncol(k1)], digits = 2))
-```
-
-Mixed models.
-
-```{r}
-library(BiocParallel)
-# 1st approach
-mm <- mmDS(sce, method = "dream",
-  n_cells = 10, n_samples = 2,
-  min_count = 1, min_cells = 20,
-  BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE)
-  )
-
-# 2nd & 3rd approach
-mm <- mmDS(sce, method = "vst", vst = "sctransform")
-mm <- mmDS(sce, method = "nbinom")
 ```
 
 Print results.
@@ -183,6 +167,84 @@ library(purrr)
 library(UpSetR)
 de_gs_by_k <- map(tbl_fil, "gene")
 upset(fromList(de_gs_by_k))
+```
+
+## Mixed Effect Analysis
+
+Mixed models.
+
+```{r}
+library(BiocParallel)
+
+if(file.exists("mm_dream.RData")) {
+  
+  load("mm_dream.RData")
+  
+} else {
+  
+  # 1st approach (takes about 40 min with 16 cores and 128 GB RAM)
+  mm_dream <- mmDS(sce, method = "dream",
+    n_cells = 10, n_samples = 2,
+    min_count = 1, min_cells = 20,
+    BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE)
+    )
+  save(mm_dream, file = "mm_dream.RData")
+  
+}
+```
+
+Some other mixed models.
+
+```{r eval=FALSE}
+# 2nd & 3rd approach
+mm_vst <- mmDS(sce, method = "vst", vst = "sctransform",
+  BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE))
+save(mm_vst = "mm_vst.RData")
+mm_nbinom <- mmDS(sce, method = "nbinom", 
+  BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE))
+save(mm_nbinom = "mm_nbinom.RData")
+```
+
+## Comparison of Pseudobulk and Mixed Models
+
+Scatter and 2d histograms comparing $p$-values form both models look very different.
+
+```{r}
+mixed <- mm_dream |> 
+  bind_rows() |> 
+  select(gene, cluster_id, p_val_mixed = p_val, p_adj_mixed = p_adj.glb)
+
+bulk <- tbl |> 
+  bind_rows() |> 
+  select(gene, cluster_id, p_val_bulk = p_val, p_adj_bulk = p_adj.glb)
+
+combo <- inner_join(mixed, bulk, by = c("gene", "cluster_id"))
+
+ggplot(combo, aes(p_val_bulk, p_val_mixed)) + 
+  geom_point() + 
+  facet_wrap(~cluster_id, nrow = 2) +
+  coord_fixed()
+
+ggplot(combo, aes(p_val_bulk, p_val_mixed)) +
+  geom_hex(bins = 30, aes(fill = stat(log(count)))) +
+  facet_wrap(~cluster_id, nrow = 2) + 
+  coord_fixed() +
+  xlab("bulk p-values") + 
+  ylab("mixed p-values")
+```
+
+What is the agreement between methods on interesting genes?
+
+```{r}
+alpha <- 0.05
+combo |> 
+  group_by(cluster_id) |>
+  summarize(
+  both_yes = mean(p_adj_mixed <= alpha & p_adj_bulk <= alpha),
+  both_no  = mean(p_adj_mixed > alpha & p_adj_bulk > alpha),
+  mixed_yes_bulk_no = mean(p_adj_mixed <= alpha & p_adj_bulk > alpha),
+  mixed_no_bulk_yes = mean(p_adj_mixed > alpha & p_adj_bulk <= alpha)
+  )
 ```
 
 ## Reproducibility
