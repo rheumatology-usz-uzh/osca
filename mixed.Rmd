@@ -123,7 +123,7 @@ t(head(assay(pb)))
 MDS plot.
 
 ```{r}
-pb_mds <- pbMDS(pb)
+pbMDS(pb)
 ```
 
 Pseudobulk.
