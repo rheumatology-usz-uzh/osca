@@ -15,7 +15,7 @@ We will follow the `muscat` vignette on Bioconductor [here](https://bioconductor
 
 Install the necessary R package from Bioconductor.
 
-```{r}
+```{r eval=FALSE}
 if (!require("BiocManager", quietly = TRUE))
     install.packages("BiocManager")
 
@@ -176,13 +176,13 @@ Mixed models.
 ```{r}
 library(BiocParallel)
 
+# 1st approach (takes about 40 min with 16 cores and 128 GB RAM)
 if(file.exists("mm_dream.RData")) {
   
   load("mm_dream.RData")
   
 } else {
   
-  # 1st approach (takes about 40 min with 16 cores and 128 GB RAM)
   mm_dream <- mmDS(sce, method = "dream",
     n_cells = 10, n_samples = 2,
     min_count = 1, min_cells = 20,
@@ -195,14 +195,35 @@ if(file.exists("mm_dream.RData")) {
 
 Some other mixed models.
 
-```{r eval=FALSE}
-# 2nd & 3rd approach
-mm_vst <- mmDS(sce, method = "vst", vst = "sctransform",
-  BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE))
-save(mm_vst, file = "mm_vst.RData")
-mm_nbinom <- mmDS(sce, method = "nbinom", 
-  BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE))
-save(mm_nbinom, file = "mm_nbinom.RData")
+```{r}
+# 2nd approach
+if(file.exists("mm_vst.RData")) {
+  
+  load("mm_vst.RData")
+  
+} else {
+  
+  mm_vst <- mmDS(sce, method = "vst", vst = "sctransform",
+                 BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE))
+  save(mm_vst, file = "mm_vst.RData")
+  
+}
+```
+
+```{r}
+# 3rd approach
+if(file.exists("mm_nbinom.RData")) {
+  
+  load("mm_nbinom.RData")
+  
+} else {
+  
+  mm_nbinom <- mmDS(sce, method = "nbinom", 
+                    BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE))
+  save(mm_nbinom, file = "mm_nbinom.RData")
+  
+}
+
 ```
 
 ## Comparison of Pseudobulk and Mixed Models
