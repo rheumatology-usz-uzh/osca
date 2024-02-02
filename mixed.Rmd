@@ -199,10 +199,10 @@ Some other mixed models.
 # 2nd & 3rd approach
 mm_vst <- mmDS(sce, method = "vst", vst = "sctransform",
   BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE))
-save(mm_vst = "mm_vst.RData")
+save(mm_vst, file = "mm_vst.RData")
 mm_nbinom <- mmDS(sce, method = "nbinom", 
   BPPARAM = MulticoreParam(workers = 16, progressbar = TRUE))
-save(mm_nbinom = "mm_nbinom.RData")
+save(mm_nbinom, file = "mm_nbinom.RData")
 ```
 
 ## Comparison of Pseudobulk and Mixed Models
