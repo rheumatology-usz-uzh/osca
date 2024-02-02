@@ -9,7 +9,9 @@ date: "`r gsub(' 0', ' ', format(Sys.time(), '%B %d, %Y'))`"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-We will follow chapter 4 from [here](https://bioconductor.org/books/3.18/OSCA.multisample/multi-sample-comparisons.html).
+## Goal
+
+Setup pseudobulk worklow. We will follow chapter 4 from [here](https://bioconductor.org/books/3.18/OSCA.multisample/multi-sample-comparisons.html).
 
 ## Packages
 

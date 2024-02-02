@@ -9,7 +9,9 @@ date: "`r gsub(' 0', ' ', format(Sys.time(), '%B %d, %Y'))`"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-We will follow the `distinct` vignette on Bioconductor [here](https://bioconductor.org/packages/release/bioc/vignettes/distinct/inst/doc/distinct.html).
+## Goal
+
+Setup nonparametric workflow. We will follow the `distinct` vignette on Bioconductor [here](https://bioconductor.org/packages/release/bioc/vignettes/distinct/inst/doc/distinct.html).
 
 ## Packages
 
@@ -29,12 +31,18 @@ if (!require("BiocManager", quietly = TRUE))
 devtools::install_github("https://github.com/SimoneTiberi/distinct")
 ```
 
+Load packages.
+
+```{r}
+library(SingleCellExperiment)
+library(distinct)
+```
+
 ## Data
 
 Load the Kang 18 dataset from their vignette.
 
 ```{r}
-library(SingleCellExperiment)
 data("Kang_subset", package = "distinct")
 Kang_subset
 colData(Kang_subset)
@@ -46,8 +54,6 @@ Kang_subset@metadata$experiment_info
 Create design matrix.
 
 ```{r}
-library(distinct)
-
 samples = Kang_subset@metadata$experiment_info$sample_id
 group = Kang_subset@metadata$experiment_info$stim
 design = model.matrix(~group)

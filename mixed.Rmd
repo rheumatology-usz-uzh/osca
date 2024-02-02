@@ -9,7 +9,9 @@ date: "`r gsub(' 0', ' ', format(Sys.time(), '%B %d, %Y'))`"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-We will follow the `muscat` vignette on Bioconductor [here](https://bioconductor.org/packages/release/bioc/vignettes/muscat/inst/doc/analysis.html#differential-state-ds-analysis).
+## Goal
+
+Setup mixed effect workflow. We will follow the `muscat` vignette on Bioconductor [here](https://bioconductor.org/packages/release/bioc/vignettes/muscat/inst/doc/analysis.html#differential-state-ds-analysis).
 
 ## Packages
 
@@ -22,12 +24,23 @@ if (!require("BiocManager", quietly = TRUE))
 BiocManager::install(c("muscat", "scater", "UpSetR"))
 ```
 
+Load packages.
+
+```{r message=FALSE}
+library(ExperimentHub)
+library(scater)
+library(muscat)
+library(dplyr)
+library(purrr)
+library(UpSetR)
+library(BiocParallel)
+```
+
 ## Data
 
 Kang 2018 from the vignette.
 
 ```{r}
-library(ExperimentHub)
 eh <- ExperimentHub()
 query(eh, "Kang")
 (sce <- eh[["EH2259"]])
@@ -41,7 +54,6 @@ sce <- sce[rowSums(counts(sce) > 0) > 0, ]
 dim(sce)
 
 # calculate per-cell quality control (QC) metrics
-library(scater)
 qc <- perCellQCMetrics(sce)
 
 # remove cells with few or many detected genes
@@ -61,7 +73,6 @@ sce <- logNormCounts(sce)
 Data preparation.
 
 ```{r}
-library(muscat)
 sce$id <- paste0(sce$stim, sce$ind)
 (sce <- prepSCE(sce, 
     kid = "cell", # subpopulation assignments
@@ -132,7 +143,6 @@ head(format(k1[, -ncol(k1)], digits = 2))
 Print results.
 
 ```{r}
-library(dplyr)
 # filter FDR < 5%, abs(logFC) > 1 & sort by adj. p-value
 tbl_fil <- lapply(tbl, function(u) {
   u <- dplyr::filter(u, p_adj.loc < 0.05, abs(logFC) > 1)
@@ -163,8 +173,6 @@ t(head(assay(frq), 5))
 Visualizing between-cluster concordance.
 
 ```{r}
-library(purrr)
-library(UpSetR)
 de_gs_by_k <- map(tbl_fil, "gene")
 upset(fromList(de_gs_by_k))
 ```
@@ -174,8 +182,6 @@ upset(fromList(de_gs_by_k))
 Mixed models.
 
 ```{r}
-library(BiocParallel)
-
 # 1st approach (takes about 40 min with 16 cores and 128 GB RAM)
 if(file.exists("mm_dream.RData")) {
   
@@ -223,49 +229,67 @@ if(file.exists("mm_nbinom.RData")) {
   save(mm_nbinom, file = "mm_nbinom.RData")
   
 }
-
 ```
 
 ## Comparison of Pseudobulk and Mixed Models
 
-Scatter and 2d histograms comparing $p$-values form both models look very different.
+Two-dimensional histograms comparing $p$-values form both models look very different.
 
-```{r}
-mixed <- mm_dream |> 
-  bind_rows() |> 
-  select(gene, cluster_id, p_val_mixed = p_val, p_adj_mixed = p_adj.glb)
+```{r fig.width=12}
+pvalue_plot <- function(mm, tbl) {
 
-bulk <- tbl |> 
-  bind_rows() |> 
-  select(gene, cluster_id, p_val_bulk = p_val, p_adj_bulk = p_adj.glb)
+  mixed <- mm |> 
+    bind_rows() |> 
+    select(gene, cluster_id, p_val_mixed = p_val, p_adj_mixed = p_adj.glb)
+  
+  bulk <- tbl |> 
+    bind_rows() |> 
+    select(gene, cluster_id, p_val_bulk = p_val, p_adj_bulk = p_adj.glb)
+  
+  combo <- inner_join(mixed, bulk, by = c("gene", "cluster_id"))
+  
+  ggplot(combo, aes(p_val_bulk, p_val_mixed)) +
+    geom_hex(bins = 30, aes(fill = after_stat(log(count)))) +
+    facet_wrap(~cluster_id, nrow = 2) + 
+    coord_fixed() +
+    xlab("bulk p-values") + 
+    ylab("mixed p-values")
 
-combo <- inner_join(mixed, bulk, by = c("gene", "cluster_id"))
-
-ggplot(combo, aes(p_val_bulk, p_val_mixed)) + 
-  geom_point() + 
-  facet_wrap(~cluster_id, nrow = 2) +
-  coord_fixed()
-
-ggplot(combo, aes(p_val_bulk, p_val_mixed)) +
-  geom_hex(bins = 30, aes(fill = stat(log(count)))) +
-  facet_wrap(~cluster_id, nrow = 2) + 
-  coord_fixed() +
-  xlab("bulk p-values") + 
-  ylab("mixed p-values")
+}
+pvalue_plot(mm_dream, tbl) + ggtitle("LMM on Log Counts")
+pvalue_plot(mm_vst, tbl) + ggtitle("LMM on VST Counts")
+pvalue_plot(mm_nbinom, tbl) + ggtitle("GLMM on Counts")
 ```
 
 What is the agreement between methods on interesting genes?
 
 ```{r}
-alpha <- 0.05
-combo |> 
-  group_by(cluster_id) |>
-  summarize(
-  both_yes = mean(p_adj_mixed <= alpha & p_adj_bulk <= alpha),
-  both_no  = mean(p_adj_mixed > alpha & p_adj_bulk > alpha),
-  mixed_yes_bulk_no = mean(p_adj_mixed <= alpha & p_adj_bulk > alpha),
-  mixed_no_bulk_yes = mean(p_adj_mixed > alpha & p_adj_bulk <= alpha)
-  )
+yardstick <- function(mm, tbl, alpha = 0.05) {
+  
+  mixed <- mm |> 
+    bind_rows() |> 
+    select(gene, cluster_id, p_val_mixed = p_val, p_adj_mixed = p_adj.glb)
+  
+  bulk <- tbl |> 
+    bind_rows() |> 
+    select(gene, cluster_id, p_val_bulk = p_val, p_adj_bulk = p_adj.glb)
+  
+  combo <- inner_join(mixed, bulk, by = c("gene", "cluster_id"))
+  
+  combo |> 
+    na.omit() |>
+    group_by(cluster_id) |>
+    summarize(
+      both_yes = mean(p_adj_mixed <= alpha & p_adj_bulk <= alpha),
+      both_no  = mean(p_adj_mixed > alpha & p_adj_bulk > alpha),
+      mixed_yes_bulk_no = mean(p_adj_mixed <= alpha & p_adj_bulk > alpha),
+      mixed_no_bulk_yes = mean(p_adj_mixed > alpha & p_adj_bulk <= alpha)
+    )
+  
+}
+yardstick(mm_dream, tbl)
+yardstick(mm_vst, tbl)
+yardstick(mm_nbinom, tbl)
 ```
 
 ## Reproducibility
