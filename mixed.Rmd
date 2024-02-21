@@ -261,6 +261,32 @@ pvalue_plot(mm_vst, tbl) + ggtitle("LMM on VST Counts")
 pvalue_plot(mm_nbinom, tbl) + ggtitle("GLMM on Counts")
 ```
 
+Comparison on fold changes.
+
+```{r}
+logfc_plot <- function(mm, tbl) {
+
+  mixed <- mm |> 
+    bind_rows() |> 
+    select(gene, cluster_id, logfc_mixed = logFC)
+  
+  bulk <- tbl |> 
+    bind_rows() |> 
+    select(gene, cluster_id, logfc_bulk = logFC)
+  
+  combo <- inner_join(mixed, bulk, by = c("gene", "cluster_id"))
+  
+  ggplot(combo, aes(logfc_bulk, logfc_mixed)) +
+    geom_hex(bins = 30, aes(fill = after_stat(log(count)))) +
+    facet_wrap(~cluster_id, nrow = 2) + 
+    coord_fixed() +
+    xlab("bulk logFC") + 
+    ylab("mixed logFC")
+
+}
+logfc_plot(mm_dream, tbl) + ggtitle("LMM on Log Counts")
+```
+
 What is the agreement between methods on interesting genes?
 
 ```{r}
