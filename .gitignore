@@ -6,3 +6,4 @@
 *.html
 *.RData
 .DS_Store
+*.out
